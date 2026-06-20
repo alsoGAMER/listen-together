@@ -26,9 +26,10 @@ type Authenticator struct {
 	httpClient *http.Client
 	allowed    []string // normalized allowlist of server base URLs; empty = allow any
 
-	mu    sync.Mutex
-	cache map[string]time.Time // credential fingerprint -> expiry
-	ttl   time.Duration
+	mu        sync.Mutex
+	cache     map[string]time.Time // credential fingerprint -> expiry
+	ttl       time.Duration
+	lastSweep time.Time // last time expired entries were purged
 }
 
 // New builds an Authenticator. If allowedServers is empty, any Subsonic server
@@ -160,7 +161,18 @@ func (a *Authenticator) cachedValid(fp string) bool {
 func (a *Authenticator) storeValid(fp string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.cache[fp] = time.Now().Add(a.ttl)
+	now := time.Now()
+	// Opportunistically purge expired entries (at most once per ttl) so the cache
+	// can't grow unbounded over long uptimes with many distinct credentials.
+	if now.Sub(a.lastSweep) >= a.ttl {
+		for k, exp := range a.cache {
+			if now.After(exp) {
+				delete(a.cache, k)
+			}
+		}
+		a.lastSweep = now
+	}
+	a.cache[fp] = now.Add(a.ttl)
 }
 
 func credFingerprint(server string, p protocol.AuthenticatePayload) string {
