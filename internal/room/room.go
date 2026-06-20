@@ -23,6 +23,11 @@ type Room struct {
 	members   map[string]string // memberID -> username
 	transport protocol.Transport
 	seq       uint64
+
+	// lastClientTimeMs is the highest host-stamped logical clock applied so far.
+	// It guards against out-of-order transports within a single host's tenure and
+	// is reset to 0 whenever the host changes (a new host's clock is unrelated).
+	lastClientTimeMs int64
 }
 
 // ID returns the room's immutable shareable code.
@@ -75,6 +80,14 @@ func (r *Room) ApplyTransport(memberID string, in protocol.TransportInput) bool 
 	if r.hostID != memberID {
 		return false
 	}
+	// Drop transports that arrive out of order (stale logical clock). A zero
+	// ClientTimeMs means the client doesn't stamp one, so the guard is skipped.
+	if in.ClientTimeMs != 0 {
+		if in.ClientTimeMs < r.lastClientTimeMs {
+			return false
+		}
+		r.lastClientTimeMs = in.ClientTimeMs
+	}
 	q := in.Queue
 	if q == nil {
 		q = []string{}
@@ -103,6 +116,7 @@ func (r *Room) PassControl(fromID, toID string) bool {
 		return false
 	}
 	r.hostID = toID
+	r.lastClientTimeMs = 0 // new host, unrelated clock
 	r.seq++
 	return true
 }
@@ -176,6 +190,7 @@ func (m *Manager) Leave(roomID, memberID string) (r *Room, deleted, hostChanged 
 			r.hostID = id
 			break
 		}
+		r.lastClientTimeMs = 0 // new host, unrelated clock
 		hostChanged = true
 	}
 	r.mu.Unlock()

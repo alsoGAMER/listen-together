@@ -79,6 +79,54 @@ func TestPassControl(t *testing.T) {
 	}
 }
 
+func TestTransportMonotonicity(t *testing.T) {
+	m := New()
+	r := m.Create("host1", "alice")
+	_, _ = m.Join(r.ID(), "follower1", "bob")
+
+	if ok := r.ApplyTransport("host1", protocol.TransportInput{TrackID: "t1", ClientTimeMs: 100}); !ok {
+		t.Fatal("first transport rejected")
+	}
+	// A stale (lower clock) transport from the same host must be dropped.
+	if ok := r.ApplyTransport("host1", protocol.TransportInput{TrackID: "stale", ClientTimeMs: 50}); ok {
+		t.Fatal("stale transport accepted; want dropped")
+	}
+	if got := r.Snapshot().Transport.TrackID; got != "t1" {
+		t.Fatalf("stale transport mutated state: trackId = %q", got)
+	}
+	// A newer clock is accepted.
+	if ok := r.ApplyTransport("host1", protocol.TransportInput{TrackID: "t2", ClientTimeMs: 150}); !ok {
+		t.Fatal("newer transport rejected")
+	}
+
+	// Passing control resets the logical clock so the new host's unrelated clock
+	// is not treated as stale.
+	if ok := r.PassControl("host1", "follower1"); !ok {
+		t.Fatal("pass control failed")
+	}
+	if ok := r.ApplyTransport("follower1", protocol.TransportInput{TrackID: "t3", ClientTimeMs: 1}); !ok {
+		t.Fatal("new host's low clock rejected after pass-control; clock not reset")
+	}
+	if got := r.Snapshot().Transport.TrackID; got != "t3" {
+		t.Fatalf("new host transport not applied: trackId = %q", got)
+	}
+}
+
+// A zero ClientTimeMs means the client doesn't stamp a clock, so the guard is
+// skipped and every transport is accepted in order.
+func TestTransportNoClockAlwaysApplies(t *testing.T) {
+	m := New()
+	r := m.Create("host1", "alice")
+	for i, track := range []string{"a", "b", "c"} {
+		if ok := r.ApplyTransport("host1", protocol.TransportInput{TrackID: track}); !ok {
+			t.Fatalf("transport %d (%s) rejected with zero clock", i, track)
+		}
+	}
+	if got := r.Snapshot().Transport.TrackID; got != "c" {
+		t.Fatalf("final trackId = %q, want c", got)
+	}
+}
+
 func TestLeaveReassignsHostAndDeletesEmpty(t *testing.T) {
 	m := New()
 	r := m.Create("host1", "alice")

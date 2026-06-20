@@ -83,13 +83,16 @@ type Transport struct {
 }
 
 // TransportInput is what a host sends. ServerTimeMs is ignored on input and
-// re-stamped by the server.
+// re-stamped by the server. ClientTimeMs is a monotonic logical clock stamped by
+// the sending host; the server uses it to drop transports that arrive out of
+// order, and ignores it (treats it as absent) when zero.
 type TransportInput struct {
-	Playing    bool     `json:"playing"`
-	PositionMs int64    `json:"positionMs"`
-	TrackID    string   `json:"trackId"`
-	Queue      []string `json:"queue"`
-	QueueIndex int      `json:"queueIndex"`
+	Playing      bool     `json:"playing"`
+	PositionMs   int64    `json:"positionMs"`
+	TrackID      string   `json:"trackId"`
+	Queue        []string `json:"queue"`
+	QueueIndex   int      `json:"queueIndex"`
+	ClientTimeMs int64    `json:"clientTimeMs"`
 }
 
 // Member is a participant in a room.
