@@ -27,6 +27,13 @@ const (
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 1 << 16
 	sendBuffer     = 64
+
+	// Auth throttling: each failed attempt grows the required wait exponentially
+	// (authBackoffBase << failures-1, capped), and a connection is dropped once it
+	// reaches maxAuthFailures. This bounds outbound pings a client can trigger.
+	maxAuthFailures     = 10
+	authBackoffBase     = 500 * time.Millisecond
+	maxAuthBackoffShift = 6 // cap backoff at authBackoffBase<<6 = 32s
 )
 
 // Hub ties together the room manager, the authenticator, and the live clients.
@@ -71,6 +78,22 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	h.addClient(c)
 	go c.writePump()
 	go c.readPump()
+}
+
+// Shutdown closes all live client connections. The HTTP server's own Shutdown
+// does not touch hijacked WebSocket connections, so the process calls this after
+// it to tear them down cleanly instead of dropping them on exit.
+func (h *Hub) Shutdown() {
+	h.mu.Lock()
+	clients := make([]*client, 0, len(h.clients))
+	for _, c := range h.clients {
+		clients = append(clients, c)
+	}
+	h.mu.Unlock()
+	for _, c := range clients {
+		c.close()          // signal writePump to send a close frame
+		_ = c.conn.Close() // unblock readPump so it tears down and leaves its room
+	}
 }
 
 func (h *Hub) addClient(c *client) {
@@ -122,6 +145,14 @@ func (h *Hub) dispatch(c *client, env protocol.Envelope) {
 }
 
 func (h *Hub) handleAuthenticate(c *client, raw json.RawMessage) {
+	// Throttle repeated attempts so a connection can't use us to hammer arbitrary
+	// Subsonic endpoints (each attempt below triggers an outbound ping).
+	if c.authBackoff() > 0 {
+		c.sendError("too many authentication attempts; slow down")
+		return
+	}
+	c.lastAuthAt = time.Now()
+
 	var p protocol.AuthenticatePayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		c.sendError("invalid authenticate payload")
@@ -131,9 +162,14 @@ func (h *Hub) handleAuthenticate(c *client, raw json.RawMessage) {
 	defer cancel()
 	server, err := h.auth.Validate(ctx, p)
 	if err != nil {
+		c.authFailures++
 		c.sendError("authentication failed: " + err.Error())
+		if c.authFailures >= maxAuthFailures {
+			_ = c.conn.Close() // readPump unblocks, tears the connection down
+		}
 		return
 	}
+	c.authFailures = 0
 	c.server = server
 	c.username = p.Username
 	c.authed = true

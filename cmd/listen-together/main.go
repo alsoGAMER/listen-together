@@ -64,6 +64,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	h.Shutdown() // close hijacked WebSocket connections srv.Shutdown leaves open
 	log.Printf("shut down")
 }
 

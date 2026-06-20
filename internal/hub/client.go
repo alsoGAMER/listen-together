@@ -22,6 +22,11 @@ type client struct {
 	server   string // normalized server URL bound at authentication
 	authed   bool
 
+	// Auth throttling state. Only ever touched from the readPump goroutine (via
+	// dispatch -> handleAuthenticate), so it needs no lock.
+	authFailures int
+	lastAuthAt   time.Time
+
 	sendCh    chan []byte
 	done      chan struct{}
 	closeOnce sync.Once
@@ -44,6 +49,26 @@ func (c *client) currentRoom() string {
 
 func (c *client) close() {
 	c.closeOnce.Do(func() { close(c.done) })
+}
+
+// authBackoff reports how long the client must wait before another auth attempt,
+// based on consecutive failures (exponential, capped). Zero means it may try now.
+// This stops a connection from using the server to hammer arbitrary Subsonic
+// endpoints, since each attempt triggers an outbound ping.
+func (c *client) authBackoff() time.Duration {
+	if c.authFailures == 0 {
+		return 0
+	}
+	shift := c.authFailures - 1
+	if shift > maxAuthBackoffShift {
+		shift = maxAuthBackoffShift
+	}
+	backoff := authBackoffBase << shift
+	elapsed := time.Since(c.lastAuthAt)
+	if elapsed >= backoff {
+		return 0
+	}
+	return backoff - elapsed
 }
 
 // send marshals an envelope and queues it. Non-blocking: if the client's buffer
