@@ -1,0 +1,27 @@
+# Example: Navidrome + listen-together side by side.
+# The sidecar never talks to Navidrome's DB or filesystem; it only validates
+# client credentials via Navidrome's public Subsonic /rest/ping endpoint.
+
+services:
+  navidrome:
+    image: deluan/navidrome:latest
+    ports:
+      - "4533:4533"
+    environment:
+      ND_LOGLEVEL: info
+    volumes:
+      - ./navidrome/data:/data
+      - ./music:/music:ro
+    restart: unless-stopped
+
+  listen-together:
+    build: .
+    image: git.alsogamer.com/alsog/listen-together:latest
+    ports:
+      - "4040:4040"
+    environment:
+      LT_PORT: "4040"
+      # Restrict which servers clients may authenticate against. Strongly
+      # recommended in production; omit only for local testing (open relay).
+      LT_ALLOWED_SERVERS: "http://navidrome:4533,https://music.example.com"
+    restart: unless-stopped

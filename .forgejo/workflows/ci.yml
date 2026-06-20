@@ -1,0 +1,42 @@
+# CI for listen-together (Go service).
+#
+# lint-test — gofmt check, go vet, race-enabled tests, and a build smoke test
+# on every PR / push to main.
+#
+# Runs on Forgejo Actions (runs-on: docker + a language container). node is
+# installed before the checkout step because actions/checkout@v4 needs it and
+# the golang image ships none.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-test:
+    runs-on: docker
+    container:
+      image: golang:1.26
+    steps:
+      - name: Install node for checkout
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs
+          rm -rf /var/lib/apt/lists/*
+
+      - uses: actions/checkout@v4
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { echo 'run gofmt -w .'; gofmt -l .; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test (race)
+        run: go test ./... -race
+
+      - name: go build
+        run: go build ./...
