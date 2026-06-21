@@ -1,0 +1,15 @@
+# Keep the build context minimal: only the Go sources plus go.mod/go.sum are
+# needed to build the binary. None of this reaches the final (distroless) image
+# either way, but excluding it shrinks the context sent to the daemon and stops
+# doc-only edits from invalidating the `COPY . .` layer cache.
+.git
+.gitignore
+.dockerignore
+.forgejo
+Dockerfile
+docker-compose.example.yml
+Makefile
+LICENSE
+README.md
+docs/
+**/*_test.go
