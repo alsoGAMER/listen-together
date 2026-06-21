@@ -109,6 +109,20 @@ func newServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
+func TestUnauthenticatedConnectionDropped(t *testing.T) {
+	h := hub.New(auth.New(nil), hub.Options{AuthTimeout: 150 * time.Millisecond})
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	t.Cleanup(srv.Close)
+
+	c := dial(t, srv)
+	// Never authenticate. The server must close the connection shortly after the
+	// auth timeout; a read should then fail rather than block indefinitely.
+	_ = c.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := c.conn.ReadMessage(); err == nil {
+		t.Fatal("expected the unauthenticated connection to be closed")
+	}
+}
+
 func TestRequiresAuth(t *testing.T) {
 	srv := newServer(t)
 	c := dial(t, srv)

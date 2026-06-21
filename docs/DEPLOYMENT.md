@@ -105,6 +105,10 @@ Clients then connect to `wss://party.example.com/ws`.
   is cached in memory (5 min TTL) — raw credentials are not retained.
 - Stream URLs and audio never pass through the sidecar; it only relays track ids
   and positions.
+- **Connection abuse is bounded automatically:** failed authentication attempts
+  back off exponentially and the socket is dropped after repeated failures, and a
+  connection that never authenticates is closed after ~20s, so idle/unauthenticated
+  sockets can't accumulate.
 - Terminate TLS in front of it; do not expose plain `:4040` to the internet.
 
 ## Operations

@@ -127,9 +127,15 @@ func (c *client) readPump() {
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	// Until authenticated the connection has only a short deadline, so an idle or
+	// unauthenticated socket can't linger (handleAuthenticate extends it on
+	// success). Pre-auth we don't let pongs reset it, or a client could stay
+	// connected forever without ever authenticating.
+	c.conn.SetReadDeadline(time.Now().Add(c.hub.authTimeout))
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		if c.authed {
+			c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		}
 		return nil
 	})
 

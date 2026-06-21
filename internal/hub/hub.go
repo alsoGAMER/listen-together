@@ -35,22 +35,29 @@ const (
 	maxAuthFailures     = 10
 	authBackoffBase     = 500 * time.Millisecond
 	maxAuthBackoffShift = 6 // cap backoff at authBackoffBase<<6 = 32s
+
+	// A connection must authenticate within this window or it's dropped, so idle
+	// unauthenticated sockets (which browsers keep alive by auto-answering pings)
+	// can't accumulate. Comfortably longer than the Subsonic ping budget (~8s).
+	defaultAuthTimeout = 20 * time.Second
 )
 
 // Options configures a Hub. The zero value is valid: unlimited rooms/members and
 // no Origin gating (the historical default — per-message Subsonic auth is the
 // real guard).
 type Options struct {
-	MaxRooms          int      // cap on concurrent rooms; 0 = unlimited
-	MaxMembersPerRoom int      // cap on members per room; 0 = unlimited
-	AllowedOrigins    []string // browser Origin allowlist; empty = allow any
+	MaxRooms          int           // cap on concurrent rooms; 0 = unlimited
+	MaxMembersPerRoom int           // cap on members per room; 0 = unlimited
+	AllowedOrigins    []string      // browser Origin allowlist; empty = allow any
+	AuthTimeout       time.Duration // window to authenticate in; 0 = default (20s)
 }
 
 // Hub ties together the room manager, the authenticator, and the live clients.
 type Hub struct {
-	rooms    *room.Manager
-	auth     *auth.Authenticator
-	upgrader websocket.Upgrader
+	rooms       *room.Manager
+	auth        *auth.Authenticator
+	upgrader    websocket.Upgrader
+	authTimeout time.Duration
 
 	mu      sync.Mutex
 	clients map[string]*client // memberID -> client
@@ -58,10 +65,15 @@ type Hub struct {
 
 // New builds a Hub backed by the given authenticator and options.
 func New(a *auth.Authenticator, opts Options) *Hub {
+	authTimeout := opts.AuthTimeout
+	if authTimeout <= 0 {
+		authTimeout = defaultAuthTimeout
+	}
 	return &Hub{
-		rooms:   room.New(opts.MaxRooms, opts.MaxMembersPerRoom),
-		auth:    a,
-		clients: make(map[string]*client),
+		rooms:       room.New(opts.MaxRooms, opts.MaxMembersPerRoom),
+		auth:        a,
+		clients:     make(map[string]*client),
+		authTimeout: authTimeout,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -234,6 +246,8 @@ func (h *Hub) handleAuthenticate(c *client, raw json.RawMessage) {
 	c.server = server
 	c.username = p.Username
 	c.authed = true
+	// Authenticated: relax the short auth deadline to the normal pong keepalive.
+	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.send(protocol.EvAuthenticated, protocol.AuthenticatedPayload{MemberID: c.id, Username: c.username})
 }
 
