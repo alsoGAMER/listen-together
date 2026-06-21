@@ -9,10 +9,10 @@ disk. Run it next to Navidrome (or anywhere reachable by your clients).
 |-----|---------|---------|
 | `LT_PORT` | `4040` | HTTP/WS listen port |
 | `LT_ALLOWED_SERVERS` | (none) | Comma-separated allowlist of server base URLs clients may authenticate against. **Empty = any server accepted (open relay).** |
-| `LT_ALLOWED_ORIGINS` | (none) | Comma-separated browser `Origin` allowlist for the WS upgrade. Empty = any origin. Origin-less requests (native/CLI clients) are always allowed. |
+| `LT_ALLOWED_ORIGINS` | (none) | Comma-separated browser `Origin` allowlist for the WS upgrade. **Empty = any origin.** Origin-less requests (native/CLI clients) are always allowed. |
 | `LT_MAX_ROOMS` | `0` | Cap on concurrent rooms. `0` = unlimited. Bounds memory on a public instance. |
 | `LT_MAX_MEMBERS_PER_ROOM` | `0` | Cap on members per room. `0` = unlimited. Bounds broadcast fan-out. |
-| `LT_STATS_TOKEN` | (none) | If set, enables `GET /stats` protected by this bearer token. Empty = endpoint disabled. |
+| `LT_STATS_TOKEN` | (none) | If set, enables `GET /stats` protected by this bearer token. **Empty = endpoint disabled.** |
 
 Endpoints: `GET /ws` (WebSocket), `GET /healthz` (liveness), `GET /stats` (load counters, when `LT_STATS_TOKEN` is set).
 
