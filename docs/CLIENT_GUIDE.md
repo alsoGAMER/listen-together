@@ -153,6 +153,16 @@ WebSockets drop. Reconnect with backoff, re-`authenticate`, and re-`joinRoom`
 with the same room code; the first `roomState` you receive resnaps you. Reset
 `lastSeq = -1` on reconnect.
 
+**Add jitter to the backoff.** When the server restarts, every client's socket
+drops at once — if they all retry on the same deterministic schedule they hammer
+the instance in lockstep just as it comes back. Randomize each delay, e.g.:
+
+```js
+const base = 1000, cap = 15000;
+const delay = Math.random() * Math.min(cap, base * 2 ** attempt); // full jitter
+// (or a fixed backoff ±20%: backoff * (0.8 + Math.random() * 0.4))
+```
+
 ---
 
 ## Feishin integration map
