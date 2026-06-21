@@ -40,6 +40,23 @@ Subsonic server. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   threshold (~250 ms target).
 - **Ephemeral** in-memory rooms — no database.
 
+## Public test instance
+
+A best-effort public instance runs at **`party.alsogamer.com`** if you want to try
+Listen Together without self-hosting:
+
+- **Sync server URL:** `https://party.alsogamer.com` (clients derive
+  `wss://party.alsogamer.com/ws`). In Feishin: *Settings → Playback → Listen
+  Together*.
+- Everyone in a room must use accounts on the **same** Subsonic/Navidrome server —
+  only track ids and positions are synced, never stream URLs or audio.
+
+It's for testing only: **no uptime or persistence guarantees**, rooms are
+ephemeral, and it may be wiped or taken down at any time. Note that authenticating
+sends your Subsonic credentials to the instance to validate them against your
+server, so only use a public instance you trust — for anything real, self-host
+(below).
+
 ## Quick start
 
 ```sh
@@ -84,6 +101,7 @@ docs/                  architecture, protocol, client guide, deployment
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — full WebSocket protocol reference + examples
 - [docs/CLIENT_GUIDE.md](docs/CLIENT_GUIDE.md) — how to build a client (clock sync, queue resolution, echo suppression); Feishin integration notes
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — env, Docker, TLS/reverse proxy, security, scaling
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common WebSocket / auth / proxy problems and fixes
 
 ## Develop
 
