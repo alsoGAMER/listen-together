@@ -96,7 +96,10 @@ func (a *Authenticator) pingSubsonic(ctx context.Context, server string, p proto
 		q.Set("t", p.Token)
 		q.Set("s", p.Salt)
 	} else {
-		q.Set("p", p.Password)
+		// Hex-encode the password (Subsonic "enc:" form) so it isn't sent as
+		// plaintext in the query string / the target server's access logs. This
+		// fallback is rarely used; clients normally send token+salt.
+		q.Set("p", "enc:"+hex.EncodeToString([]byte(p.Password)))
 	}
 
 	endpoint := server + "/rest/ping.view?" + q.Encode()

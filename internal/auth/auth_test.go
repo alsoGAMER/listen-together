@@ -66,6 +66,26 @@ func TestValidateSuccessAndCache(t *testing.T) {
 	}
 }
 
+func TestValidatePasswordHexEncoded(t *testing.T) {
+	var gotP string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotP = r.URL.Query().Get("p")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"subsonic-response":{"status":"ok","version":"1.16.1"}}`))
+	}))
+	defer srv.Close()
+
+	if _, err := New(nil).Validate(context.Background(), protocol.AuthenticatePayload{
+		ServerURL: srv.URL, Username: "alice", Password: "s3cr3t",
+	}); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	// "s3cr3t" hex-encoded, sent in Subsonic enc: form (not plaintext).
+	if want := "enc:733363723374"; gotP != want {
+		t.Fatalf("password param = %q, want %q", gotP, want)
+	}
+}
+
 func TestValidateFailure(t *testing.T) {
 	srv := mockSubsonic(t, "failed")
 	defer srv.Close()
