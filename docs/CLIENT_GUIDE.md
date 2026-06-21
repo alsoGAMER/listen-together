@@ -99,6 +99,13 @@ Notes:
 - 250 ms is the v1 "listening party" threshold. Lower it later only alongside
   per-device latency calibration (see ARCHITECTURE non-goals).
 - For paused rooms, just match `positionMs` (no clock math needed).
+- **A seek only lands once the media is seekable.** When switching track (or
+  joining mid-track), a large file on a slow connection can take a moment to
+  buffer, so a seek issued immediately is lost. Don't seek once on a fixed timer;
+  instead re-apply the *live* expected position periodically until it sticks (the
+  Feishin client runs a short reconciliation loop). Catch-up latency on big files
+  (e.g. large FLACs over a slow link) is inherent — the follower converges as soon
+  as the file is buffered enough to seek.
 
 ## 5. Emit `transport` (host only) + echo suppression
 
