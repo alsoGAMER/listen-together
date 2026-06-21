@@ -142,7 +142,8 @@ func TestEndToEndSyncFlow(t *testing.T) {
 	host.expect(protocol.EvRoomState) // host gets the member-list update too
 
 	// Host drives transport; both receive it.
-	host.sendRaw(protocol.EvTransport, protocol.TransportInput{Playing: true, PositionMs: 1500, TrackID: "track-A", Queue: []string{"track-A"}, QueueIndex: 0})
+	trackQueue := []string{"track-A"}
+	host.sendRaw(protocol.EvTransport, protocol.TransportInput{Playing: true, PositionMs: 1500, TrackID: "track-A", Queue: &trackQueue, QueueIndex: 0})
 	for _, c := range []*wsConn{host, follower} {
 		ts := roomState(t, c.expect(protocol.EvRoomState)).Transport
 		if !ts.Playing || ts.TrackID != "track-A" || ts.PositionMs != 1500 {

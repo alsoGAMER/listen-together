@@ -88,7 +88,12 @@ func (r *Room) ApplyTransport(memberID string, in protocol.TransportInput) bool 
 		}
 		r.lastClientTimeMs = in.ClientTimeMs
 	}
-	q := in.Queue
+	// A nil Queue means "unchanged": keep what the room already has. A non-nil
+	// Queue (even empty) replaces it.
+	q := r.transport.Queue
+	if in.Queue != nil {
+		q = *in.Queue
+	}
 	if q == nil {
 		q = []string{}
 	}

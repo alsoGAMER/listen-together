@@ -86,13 +86,19 @@ type Transport struct {
 // re-stamped by the server. ClientTimeMs is a monotonic logical clock stamped by
 // the sending host; the server uses it to drop transports that arrive out of
 // order, and ignores it (treats it as absent) when zero.
+//
+// Queue is a pointer so a host can omit it when the queue is unchanged: a nil
+// Queue (field absent or null) means "keep the room's current queue", while a
+// non-nil Queue (including an empty list) replaces it. This avoids resending the
+// full track-id list on every play/pause/seek. Older clients that always send the
+// queue keep working unchanged.
 type TransportInput struct {
-	Playing      bool     `json:"playing"`
-	PositionMs   int64    `json:"positionMs"`
-	TrackID      string   `json:"trackId"`
-	Queue        []string `json:"queue"`
-	QueueIndex   int      `json:"queueIndex"`
-	ClientTimeMs int64    `json:"clientTimeMs"`
+	Playing      bool      `json:"playing"`
+	PositionMs   int64     `json:"positionMs"`
+	TrackID      string    `json:"trackId"`
+	Queue        *[]string `json:"queue"`
+	QueueIndex   int       `json:"queueIndex"`
+	ClientTimeMs int64     `json:"clientTimeMs"`
 }
 
 // Member is a participant in a room.

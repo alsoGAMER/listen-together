@@ -89,10 +89,12 @@ the room host.
 | `playing` | bool | |
 | `positionMs` | int | playback position of the current track |
 | `trackId` | string | server track id (Subsonic id) |
-| `queue` | string[] | ordered list of track ids |
+| `queue` | string[] \| null | ordered list of track ids. **Omit (or send `null`) to leave the room's current queue unchanged** — useful to avoid resending the full list on every play/pause/seek. A present list (including `[]`) replaces it. |
 | `queueIndex` | int | index of the current track within `queue` |
+| `clientTimeMs` | int | optional monotonic clock; the server drops transports whose value is lower than the last one applied (out-of-order). Omit/0 to disable. |
 
-The server stamps `serverTimeMs` and increments `seq` before broadcasting.
+The server stamps `serverTimeMs` and increments `seq` before broadcasting. The
+broadcast `roomState.transport.queue` is always the full current list.
 
 ### `requestControl`
 Ask the current host to hand over control. The host receives `controlRequested`.

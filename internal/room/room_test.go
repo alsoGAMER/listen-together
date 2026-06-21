@@ -6,6 +6,12 @@ import (
 	"github.com/alsoGAMER/listen-together/internal/protocol"
 )
 
+// sl returns a pointer to a string slice, for setting TransportInput.Queue.
+func sl(ids ...string) *[]string {
+	s := ids
+	return &s
+}
+
 func TestCreateAndJoin(t *testing.T) {
 	m := New(0, 0)
 	r, _ := m.Create("host1", "alice")
@@ -38,7 +44,7 @@ func TestTransportAuthority(t *testing.T) {
 	r, _ := m.Create("host1", "alice")
 	_, _ = m.Join(r.ID(), "follower1", "bob")
 
-	if ok := r.ApplyTransport("host1", protocol.TransportInput{Playing: true, PositionMs: 1000, TrackID: "t1", Queue: []string{"t1"}, QueueIndex: 0}); !ok {
+	if ok := r.ApplyTransport("host1", protocol.TransportInput{Playing: true, PositionMs: 1000, TrackID: "t1", Queue: sl("t1"), QueueIndex: 0}); !ok {
 		t.Fatal("host ApplyTransport returned false")
 	}
 	snap := r.Snapshot()
@@ -124,6 +130,39 @@ func TestTransportNoClockAlwaysApplies(t *testing.T) {
 	}
 	if got := r.Snapshot().Transport.TrackID; got != "c" {
 		t.Fatalf("final trackId = %q, want c", got)
+	}
+}
+
+func TestTransportQueueDiff(t *testing.T) {
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
+
+	// Initial transport sets a queue.
+	r.ApplyTransport("host1", protocol.TransportInput{TrackID: "a", Queue: sl("a", "b", "c"), QueueIndex: 0})
+	if got := r.Snapshot().Transport.Queue; len(got) != 3 {
+		t.Fatalf("initial queue = %v, want 3 items", got)
+	}
+
+	// A nil queue (omitted) keeps the existing one while still updating position.
+	r.ApplyTransport("host1", protocol.TransportInput{TrackID: "b", Queue: nil, QueueIndex: 1, PositionMs: 5000})
+	snap := r.Snapshot().Transport
+	if len(snap.Queue) != 3 || snap.Queue[1] != "b" {
+		t.Fatalf("omitted queue not preserved: %v", snap.Queue)
+	}
+	if snap.QueueIndex != 1 || snap.PositionMs != 5000 {
+		t.Fatalf("non-queue fields not updated: idx=%d pos=%d", snap.QueueIndex, snap.PositionMs)
+	}
+
+	// A non-nil queue replaces it.
+	r.ApplyTransport("host1", protocol.TransportInput{TrackID: "x", Queue: sl("x", "y"), QueueIndex: 0})
+	if got := r.Snapshot().Transport.Queue; len(got) != 2 || got[0] != "x" {
+		t.Fatalf("queue not replaced: %v", got)
+	}
+
+	// An explicit empty queue clears it.
+	r.ApplyTransport("host1", protocol.TransportInput{TrackID: "", Queue: sl(), QueueIndex: -1})
+	if got := r.Snapshot().Transport.Queue; len(got) != 0 {
+		t.Fatalf("queue not cleared: %v", got)
 	}
 }
 
