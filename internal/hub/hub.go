@@ -71,9 +71,14 @@ func New(a *auth.Authenticator, opts Options) *Hub {
 }
 
 // originChecker returns a CheckOrigin func. With no allowlist it accepts any
-// origin (browser clients connect cross-origin and auth is per-message). With an
-// allowlist it accepts only those origins; requests with no Origin header (native
-// or CLI clients, which aren't subject to browser CSWSH) are also accepted.
+// origin (browser clients connect cross-origin and auth is per-message).
+//
+// With an allowlist, the check applies ONLY to browser http(s) origins — those
+// are the only ones where cross-site WebSocket hijacking is a concern. Native and
+// desktop clients aren't subject to CSWSH and send either no Origin header, the
+// literal "null", or a non-web scheme (e.g. file:// for an Electron app loaded
+// from disk, app://, capacitor://); those are always allowed so an allowlist
+// meant to restrict web origins can't accidentally lock out desktop clients.
 func originChecker(allowedOrigins []string) func(*http.Request) bool {
 	if len(allowedOrigins) == 0 {
 		return func(*http.Request) bool { return true }
@@ -85,11 +90,12 @@ func originChecker(allowedOrigins []string) func(*http.Request) bool {
 		}
 	}
 	return func(r *http.Request) bool {
-		origin := strings.ToLower(strings.TrimRight(r.Header.Get("Origin"), "/"))
-		if origin == "" {
+		origin := strings.ToLower(strings.TrimSpace(r.Header.Get("Origin")))
+		// Only gate real browser origins; let native/desktop clients through.
+		if !strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://") {
 			return true
 		}
-		_, ok := allowed[origin]
+		_, ok := allowed[strings.TrimRight(origin, "/")]
 		return ok
 	}
 }

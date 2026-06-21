@@ -53,7 +53,7 @@ docker compose -f docker-compose.example.yml up --build
 |-----|---------|---------|
 | `LT_PORT` | `4040` | HTTP/WS listen port |
 | `LT_ALLOWED_SERVERS` | (none) | Comma-separated allowlist of server base URLs. Empty = **any** server accepted (open relay; fine locally, not for production). |
-| `LT_ALLOWED_ORIGINS` | (none) | Comma-separated browser `Origin` allowlist for the WS upgrade. Empty = any origin. Requests with no `Origin` (native/CLI clients) are always allowed. |
+| `LT_ALLOWED_ORIGINS` | (none) | Comma-separated allowlist of **browser** `http(s)` origins for the WS upgrade. Empty = any origin. Only `http(s)` origins are gated; native/desktop clients (no `Origin`, `null`, or a non-web scheme like `file://` for an Electron app) are always allowed, so this can't lock out desktop clients. |
 | `LT_MAX_ROOMS` | `0` | Cap on concurrent rooms. `0` = unlimited. |
 | `LT_MAX_MEMBERS_PER_ROOM` | `0` | Cap on members per room. `0` = unlimited. |
 | `LT_STATS_TOKEN` | (none) | If set, enables `GET /stats` protected by this bearer token. Empty = endpoint disabled. |

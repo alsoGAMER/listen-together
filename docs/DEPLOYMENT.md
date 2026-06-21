@@ -9,7 +9,7 @@ disk. Run it next to Navidrome (or anywhere reachable by your clients).
 |-----|---------|---------|
 | `LT_PORT` | `4040` | HTTP/WS listen port |
 | `LT_ALLOWED_SERVERS` | (none) | Comma-separated allowlist of server base URLs clients may authenticate against. **Empty = any server accepted (open relay).** |
-| `LT_ALLOWED_ORIGINS` | (none) | Comma-separated browser `Origin` allowlist for the WS upgrade. **Empty = any origin.** Origin-less requests (native/CLI clients) are always allowed. |
+| `LT_ALLOWED_ORIGINS` | (none) | Comma-separated allowlist of **browser** `http(s)` origins for the WS upgrade. **Empty = any origin.** Only `http(s)` origins are gated; native/desktop clients (no `Origin`, `null`, or a non-web scheme such as `file://` from an Electron app) are always allowed. |
 | `LT_MAX_ROOMS` | `0` | Cap on concurrent rooms. `0` = unlimited. Bounds memory on a public instance. |
 | `LT_MAX_MEMBERS_PER_ROOM` | `0` | Cap on members per room. `0` = unlimited. Bounds broadcast fan-out. |
 | `LT_STATS_TOKEN` | (none) | If set, enables `GET /stats` protected by this bearer token. **Empty = endpoint disabled.** |
@@ -90,9 +90,12 @@ Clients then connect to `wss://party.example.com/ws`.
   outbound `ping` requests to any URL a client supplies (SSRF / open-relay risk)
   and lets anyone use your service to coordinate against arbitrary servers.
 - **For a public instance, set `LT_MAX_ROOMS` / `LT_MAX_MEMBERS_PER_ROOM`** to
-  bound memory and broadcast fan-out, and consider `LT_ALLOWED_ORIGINS` so only
-  your own client origins can open a browser WebSocket (defense-in-depth; the real
-  guard is still per-message Subsonic auth).
+  bound memory and broadcast fan-out. `LT_ALLOWED_ORIGINS` is optional
+  defense-in-depth against cross-site WebSocket hijacking from a **browser**; it
+  is low-value here because the real guard is per-message Subsonic auth (there are
+  no ambient credentials to hijack). It restricts only `http(s)` browser origins —
+  native/desktop clients (`file://`, `null`, no `Origin`) are always allowed, so
+  it won't lock out the desktop app.
 - **`/stats` is opt-in and token-protected.** It is only registered when
   `LT_STATS_TOKEN` is set; the token is checked in constant time and accepted via
   `?token=` or `Authorization: Bearer`. Keep it off (or behind your proxy) if you

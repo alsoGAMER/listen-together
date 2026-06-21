@@ -6,8 +6,10 @@
 //	LT_PORT                  HTTP/WS listen port (default 4040)
 //	LT_ALLOWED_SERVERS       comma-separated allowlist of server base URLs. If
 //	                         empty, any Subsonic server is accepted (open relay).
-//	LT_ALLOWED_ORIGINS       comma-separated browser Origin allowlist for the WS
-//	                         upgrade. If empty, any origin is accepted.
+//	LT_ALLOWED_ORIGINS       comma-separated allowlist of browser http(s) origins
+//	                         for the WS upgrade. If empty, any origin is accepted.
+//	                         Only http(s) origins are gated; native/desktop clients
+//	                         (no Origin, "null", file://, …) are always allowed.
 //	LT_MAX_ROOMS             cap on concurrent rooms (default 0 = unlimited).
 //	LT_MAX_MEMBERS_PER_ROOM  cap on members per room (default 0 = unlimited).
 //	LT_STATS_TOKEN           if set, enables GET /stats, protected by this bearer

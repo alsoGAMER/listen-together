@@ -52,8 +52,9 @@ func TestOriginChecker(t *testing.T) {
 		t.Fatal("empty allowlist should accept any origin")
 	}
 
-	// With an allowlist: only listed origins (case/trailing-slash insensitive) and
-	// origin-less (non-browser) requests pass.
+	// With an allowlist: only listed browser http(s) origins (case/trailing-slash
+	// insensitive) pass. Native/desktop origins (none, "null", non-web scheme) are
+	// never gated.
 	check := originChecker([]string{"https://app.example.com/", " HTTPS://Other.Example "})
 	cases := []struct {
 		origin string
@@ -62,9 +63,12 @@ func TestOriginChecker(t *testing.T) {
 		{"https://app.example.com", true},
 		{"https://app.example.com/", true},
 		{"https://other.example", true},
-		{"", true}, // native/CLI client, no Origin header
+		{"", true},              // native/CLI client, no Origin header
+		{"null", true},          // sandboxed/opaque origin
+		{"file://", true},       // desktop app loaded from disk (Electron)
+		{"app://feishin", true}, // custom app scheme
 		{"https://evil.example", false},
-		{"http://app.example.com", false}, // scheme mismatch
+		{"http://app.example.com", false}, // scheme mismatch (http vs https)
 	}
 	for _, tc := range cases {
 		if got := check(reqWithOrigin(tc.origin)); got != tc.want {
