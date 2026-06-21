@@ -7,8 +7,8 @@ import (
 )
 
 func TestCreateAndJoin(t *testing.T) {
-	m := New()
-	r := m.Create("host1", "alice")
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
 	if r.ID() == "" {
 		t.Fatal("expected non-empty room code")
 	}
@@ -28,14 +28,14 @@ func TestCreateAndJoin(t *testing.T) {
 }
 
 func TestJoinUnknownRoom(t *testing.T) {
-	if _, err := New().Join("NOPE12", "c1", "alice"); err == nil {
+	if _, err := New(0, 0).Join("NOPE12", "c1", "alice"); err == nil {
 		t.Fatal("expected error joining unknown room")
 	}
 }
 
 func TestTransportAuthority(t *testing.T) {
-	m := New()
-	r := m.Create("host1", "alice")
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
 	_, _ = m.Join(r.ID(), "follower1", "bob")
 
 	if ok := r.ApplyTransport("host1", protocol.TransportInput{Playing: true, PositionMs: 1000, TrackID: "t1", Queue: []string{"t1"}, QueueIndex: 0}); !ok {
@@ -61,8 +61,8 @@ func TestTransportAuthority(t *testing.T) {
 }
 
 func TestPassControl(t *testing.T) {
-	m := New()
-	r := m.Create("host1", "alice")
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
 	_, _ = m.Join(r.ID(), "follower1", "bob")
 
 	if ok := r.PassControl("follower1", "host1"); ok {
@@ -80,8 +80,8 @@ func TestPassControl(t *testing.T) {
 }
 
 func TestTransportMonotonicity(t *testing.T) {
-	m := New()
-	r := m.Create("host1", "alice")
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
 	_, _ = m.Join(r.ID(), "follower1", "bob")
 
 	if ok := r.ApplyTransport("host1", protocol.TransportInput{TrackID: "t1", ClientTimeMs: 100}); !ok {
@@ -115,8 +115,8 @@ func TestTransportMonotonicity(t *testing.T) {
 // A zero ClientTimeMs means the client doesn't stamp a clock, so the guard is
 // skipped and every transport is accepted in order.
 func TestTransportNoClockAlwaysApplies(t *testing.T) {
-	m := New()
-	r := m.Create("host1", "alice")
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
 	for i, track := range []string{"a", "b", "c"} {
 		if ok := r.ApplyTransport("host1", protocol.TransportInput{TrackID: track}); !ok {
 			t.Fatalf("transport %d (%s) rejected with zero clock", i, track)
@@ -127,9 +127,53 @@ func TestTransportNoClockAlwaysApplies(t *testing.T) {
 	}
 }
 
+func TestMaxRooms(t *testing.T) {
+	m := New(2, 0)
+	if _, err := m.Create("h1", "a"); err != nil {
+		t.Fatalf("create 1: %v", err)
+	}
+	if _, err := m.Create("h2", "b"); err != nil {
+		t.Fatalf("create 2: %v", err)
+	}
+	if _, err := m.Create("h3", "c"); err == nil {
+		t.Fatal("create 3 should fail at room cap")
+	}
+}
+
+func TestMaxMembersPerRoom(t *testing.T) {
+	m := New(0, 2)
+	r, err := m.Create("h1", "a") // host counts as a member
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := m.Join(r.ID(), "f1", "b"); err != nil {
+		t.Fatalf("join at cap edge: %v", err)
+	}
+	if _, err := m.Join(r.ID(), "f2", "c"); err == nil {
+		t.Fatal("join past member cap should fail")
+	}
+	// A member already in the room may "rejoin" (reconnect) without tripping the cap.
+	if _, err := m.Join(r.ID(), "f1", "b"); err != nil {
+		t.Fatalf("idempotent rejoin rejected: %v", err)
+	}
+}
+
+func TestCounts(t *testing.T) {
+	m := New(0, 0)
+	if rooms, members := m.Counts(); rooms != 0 || members != 0 {
+		t.Fatalf("empty counts = (%d,%d), want (0,0)", rooms, members)
+	}
+	r, _ := m.Create("h1", "a")
+	_, _ = m.Join(r.ID(), "f1", "b")
+	_, _ = m.Create("h2", "c")
+	if rooms, members := m.Counts(); rooms != 2 || members != 3 {
+		t.Fatalf("counts = (%d,%d), want (2,3)", rooms, members)
+	}
+}
+
 func TestLeaveReassignsHostAndDeletesEmpty(t *testing.T) {
-	m := New()
-	r := m.Create("host1", "alice")
+	m := New(0, 0)
+	r, _ := m.Create("host1", "alice")
 	_, _ = m.Join(r.ID(), "follower1", "bob")
 
 	room, deleted, hostChanged := m.Leave(r.ID(), "host1")

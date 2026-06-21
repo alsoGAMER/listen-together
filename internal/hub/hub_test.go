@@ -103,7 +103,7 @@ func roomState(t *testing.T, env protocol.Envelope) protocol.RoomStatePayload {
 
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	h := hub.New(auth.New(nil))
+	h := hub.New(auth.New(nil), hub.Options{})
 	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
 	t.Cleanup(srv.Close)
 	return srv

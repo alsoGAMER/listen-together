@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,15 @@ const (
 	maxAuthBackoffShift = 6 // cap backoff at authBackoffBase<<6 = 32s
 )
 
+// Options configures a Hub. The zero value is valid: unlimited rooms/members and
+// no Origin gating (the historical default — per-message Subsonic auth is the
+// real guard).
+type Options struct {
+	MaxRooms          int      // cap on concurrent rooms; 0 = unlimited
+	MaxMembersPerRoom int      // cap on members per room; 0 = unlimited
+	AllowedOrigins    []string // browser Origin allowlist; empty = allow any
+}
+
 // Hub ties together the room manager, the authenticator, and the live clients.
 type Hub struct {
 	rooms    *room.Manager
@@ -46,19 +56,41 @@ type Hub struct {
 	clients map[string]*client // memberID -> client
 }
 
-// New builds a Hub backed by the given authenticator.
-func New(a *auth.Authenticator) *Hub {
+// New builds a Hub backed by the given authenticator and options.
+func New(a *auth.Authenticator, opts Options) *Hub {
 	return &Hub{
-		rooms:   room.New(),
+		rooms:   room.New(opts.MaxRooms, opts.MaxMembersPerRoom),
 		auth:    a,
 		clients: make(map[string]*client),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
-			// Browser clients connect cross-origin; auth is per-message via
-			// Subsonic credentials, so we don't gate on Origin here.
-			CheckOrigin: func(r *http.Request) bool { return true },
+			CheckOrigin:     originChecker(opts.AllowedOrigins),
 		},
+	}
+}
+
+// originChecker returns a CheckOrigin func. With no allowlist it accepts any
+// origin (browser clients connect cross-origin and auth is per-message). With an
+// allowlist it accepts only those origins; requests with no Origin header (native
+// or CLI clients, which aren't subject to browser CSWSH) are also accepted.
+func originChecker(allowedOrigins []string) func(*http.Request) bool {
+	if len(allowedOrigins) == 0 {
+		return func(*http.Request) bool { return true }
+	}
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		if o = strings.ToLower(strings.TrimRight(strings.TrimSpace(o), "/")); o != "" {
+			allowed[o] = struct{}{}
+		}
+	}
+	return func(r *http.Request) bool {
+		origin := strings.ToLower(strings.TrimRight(r.Header.Get("Origin"), "/"))
+		if origin == "" {
+			return true
+		}
+		_, ok := allowed[origin]
+		return ok
 	}
 }
 
@@ -94,6 +126,29 @@ func (h *Hub) Shutdown() {
 		c.close()          // signal writePump to send a close frame
 		_ = c.conn.Close() // unblock readPump so it tears down and leaves its room
 	}
+}
+
+// Stats is a point-in-time snapshot of server load.
+type Stats struct {
+	Rooms   int `json:"rooms"`
+	Members int `json:"members"`
+	Clients int `json:"clients"`
+}
+
+// Stats reports current room/member/client counts.
+func (h *Hub) Stats() Stats {
+	h.mu.Lock()
+	clients := len(h.clients)
+	h.mu.Unlock()
+	rooms, members := h.rooms.Counts()
+	return Stats{Rooms: rooms, Members: members, Clients: clients}
+}
+
+// ServeStats writes the current Stats as JSON. Useful for monitoring a
+// self-hosted instance (e.g. scraping or a status check).
+func (h *Hub) ServeStats(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(h.Stats())
 }
 
 func (h *Hub) addClient(c *client) {
@@ -180,7 +235,11 @@ func (h *Hub) handleCreateRoom(c *client) {
 	if c.currentRoom() != "" {
 		h.leaveAndBroadcast(c)
 	}
-	r := h.rooms.Create(c.id, c.username)
+	r, err := h.rooms.Create(c.id, c.username)
+	if err != nil {
+		c.sendError(err.Error())
+		return
+	}
 	c.setRoom(r.ID())
 	h.broadcastRoomState(r)
 }

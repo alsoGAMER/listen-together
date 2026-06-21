@@ -24,4 +24,9 @@ services:
       # Restrict which servers clients may authenticate against. Strongly
       # recommended in production; omit only for local testing (open relay).
       LT_ALLOWED_SERVERS: "http://navidrome:4533,https://music.example.com"
+      # Optional hardening for a public instance:
+      # LT_ALLOWED_ORIGINS: "https://app.example.com"   # browser Origin allowlist
+      # LT_MAX_ROOMS: "100"                             # cap concurrent rooms
+      # LT_MAX_MEMBERS_PER_ROOM: "20"                   # cap members per room
+      # LT_STATS_TOKEN: "change-me"                     # enables token-gated GET /stats
     restart: unless-stopped

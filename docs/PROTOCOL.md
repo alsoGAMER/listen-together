@@ -58,13 +58,16 @@ Reply: `authenticated` on success, `error` on failure.
 { "event": "createRoom" }
 ```
 The caller becomes the host of a new room. The room code is returned in the
-following `roomState`.
+following `roomState`. Reply: `roomState`, or `error` if the server is at its
+configured room capacity (`LT_MAX_ROOMS`).
 
 ### `joinRoom`
 ```json
 { "event": "joinRoom", "data": { "roomId": "G7KQ2M" } }
 ```
-Reply: `roomState` broadcast to all members, or `error` if the room is unknown.
+Reply: `roomState` broadcast to all members, or `error` if the room is unknown or
+full (`LT_MAX_MEMBERS_PER_ROOM`). Re-joining a room you're already in (e.g. after
+a reconnect) never trips the member cap.
 
 ### `leaveRoom`
 ```json

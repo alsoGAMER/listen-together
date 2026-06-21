@@ -125,11 +125,16 @@ func (r *Room) PassControl(fromID, toID string) bool {
 type Manager struct {
 	mu    sync.Mutex
 	rooms map[string]*Room
+
+	// Capacity limits for public hosting. Zero means unlimited.
+	maxRooms   int // cap on concurrent rooms
+	maxMembers int // cap on members per room
 }
 
-// New returns an empty Manager.
-func New() *Manager {
-	return &Manager{rooms: make(map[string]*Room)}
+// New returns an empty Manager. maxRooms and maxMembers cap concurrent rooms and
+// per-room membership respectively; zero means unlimited.
+func New(maxRooms, maxMembers int) *Manager {
+	return &Manager{rooms: make(map[string]*Room), maxRooms: maxRooms, maxMembers: maxMembers}
 }
 
 // Get returns the room with the given id, if any.
@@ -141,9 +146,13 @@ func (m *Manager) Get(roomID string) (*Room, bool) {
 }
 
 // Create makes a new room with the given member as its sole member and host.
-func (m *Manager) Create(hostID, hostUsername string) *Room {
+// It returns an error if the server is at its room capacity.
+func (m *Manager) Create(hostID, hostUsername string) (*Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.maxRooms > 0 && len(m.rooms) >= m.maxRooms {
+		return nil, fmt.Errorf("server is at capacity (%d rooms); try again later", m.maxRooms)
+	}
 	code := m.uniqueCodeLocked()
 	r := &Room{
 		id:        code,
@@ -152,19 +161,36 @@ func (m *Manager) Create(hostID, hostUsername string) *Room {
 		transport: protocol.Transport{Queue: []string{}, QueueIndex: -1, ServerTimeMs: nowMs()},
 	}
 	m.rooms[code] = r
-	return r
+	return r, nil
 }
 
-// Join adds a member to an existing room.
+// Join adds a member to an existing room. It returns an error if the room is
+// full, unless memberID is already a member (idempotent rejoin/reconnect).
 func (m *Manager) Join(roomID, memberID, username string) (*Room, error) {
 	r, ok := m.Get(roomID)
 	if !ok {
 		return nil, fmt.Errorf("room not found: %s", roomID)
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, already := r.members[memberID]; !already && m.maxMembers > 0 && len(r.members) >= m.maxMembers {
+		return nil, fmt.Errorf("room %s is full (%d members)", roomID, m.maxMembers)
+	}
 	r.members[memberID] = username
-	r.mu.Unlock()
 	return r, nil
+}
+
+// Counts returns the number of live rooms and the total members across them.
+func (m *Manager) Counts() (rooms, members int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rooms = len(m.rooms)
+	for _, r := range m.rooms {
+		r.mu.Lock()
+		members += len(r.members)
+		r.mu.Unlock()
+	}
+	return rooms, members
 }
 
 // Leave removes a member from a room. It returns the affected room (for
