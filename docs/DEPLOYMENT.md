@@ -131,59 +131,67 @@ more than enough. If you ever need horizontal scale, either:
 
 ## Troubleshooting
 
-First, check whether the problem is reachability, the WebSocket upgrade, or the
-app, by hitting the endpoints directly:
+### Step 1 — probe the endpoints directly
+
+Narrow the problem to reachability, the WebSocket upgrade, or the app:
 
 ```sh
 # Liveness — should print "ok"
 curl -sS https://party.example.com/healthz
 
-# WebSocket handshake. Must be HTTP/1.1: the Upgrade/Connection headers are
+# WebSocket handshake. Must be HTTP/1.1 — the Upgrade/Connection headers are
 # illegal in HTTP/2, so test tools have to force 1.1 (browsers do this for you).
 curl -sS --http1.1 -o /dev/null -D - \
   -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
   https://party.example.com/ws
-# 101 Switching Protocols = OK
-# 403 Forbidden          = Origin rejected (see below)
-# 4xx/5xx, timeout       = reverse proxy not forwarding the upgrade, or down
 ```
 
-**`WebSocket connection ... failed` / `403 Forbidden` on the upgrade.** The most
-common cause is `LT_ALLOWED_ORIGINS` rejecting the client. Desktop apps (Electron
-loaded from disk) send `Origin: file://`, which is not a web origin. On **v1.0.4+**
-native/desktop origins are always allowed; on older builds any `LT_ALLOWED_ORIGINS`
-value blocks them. Fix: upgrade to v1.0.4+, **or** remove `LT_ALLOWED_ORIGINS` and
-restart. Confirm with the handshake above: no `Origin` header → `101`, adding
-`-H "Origin: file://"` → `403` means the allowlist is the culprit.
+Read the first line of the handshake response:
 
-**Handshake fails behind a reverse proxy (4xx/5xx, or it hangs).** The proxy isn't
-forwarding the WebSocket upgrade. Ensure it sets `Upgrade`/`Connection` headers and
-uses HTTP/1.1 to the origin (see the nginx/Caddy examples above). Cloudflare proxies
-WebSockets fine; just make sure the route isn't cached or under "Under Attack" mode.
+| Response | Meaning |
+|---|---|
+| `101 Switching Protocols` | OK — the upgrade works. |
+| `403 Forbidden` | Origin rejected → see *Upgrade returns 403*. |
+| `4xx` / `5xx` / timeout | Reverse proxy isn't forwarding the upgrade, or the server is down. |
 
-**`authentication failed` / `server not allowed`.** The `serverUrl` the client
-sent isn't reachable from the sidecar, the credentials are wrong, or the URL isn't
-in `LT_ALLOWED_SERVERS`. The allowlist match is exact after normalization (trailing
-slash, query, and fragment are stripped), so list the **public** URL clients
-actually use — not an internal address.
+### Upgrade returns `403` (desktop app won't connect)
 
-**`too many authentication attempts; slow down`.** The connection hit the auth
-backoff after repeated failures (exponential, then the socket is dropped at 10).
-Fix the credentials/`serverUrl`; reconnect to reset.
+- **Cause:** `LT_ALLOWED_ORIGINS` is set and rejecting the client. Desktop apps (Electron loaded from disk) send `Origin: file://`, which is not a web origin.
+- **Fix:** upgrade to **v1.0.4+** (native/desktop origins are always allowed there), **or** remove `LT_ALLOWED_ORIGINS` and restart.
+- **Confirm:** re-run the handshake — no `Origin` header gives `101`, but adding `-H "Origin: file://"` gives `403` → the allowlist is the culprit.
 
-**`server is at capacity` / `room ... is full`.** `LT_MAX_ROOMS` or
-`LT_MAX_MEMBERS_PER_ROOM` was reached. Raise the limit (or set it to `0` for
-unlimited) and restart.
+### Upgrade fails behind a reverse proxy (`4xx`/`5xx`, or hangs)
 
-**`/stats` returns 404 or 401.** It's only registered when `LT_STATS_TOKEN` is set
-(404 otherwise); a wrong/missing token gives 401. Pass it as `?token=` or
-`Authorization: Bearer`.
+- **Cause:** the proxy isn't forwarding the WebSocket upgrade.
+- **Fix:** set the `Upgrade`/`Connection` headers and use HTTP/1.1 to the origin (see the nginx/Caddy examples above).
+- **Cloudflare:** proxies WebSockets fine — just keep the route uncached and out of "Under Attack" mode.
 
-**Members in the same room never see each other.** All members of a room must hit
-the **same** instance — rooms are in-process and there's no backplane (see
-[Scaling](#scaling)). Behind multiple replicas, pin by room code or run one
-instance.
+### `authentication failed` / `server not allowed`
 
-**A room vanished.** Rooms are ephemeral: they're deleted when the last member
-leaves, and all rooms are cleared on restart. Members just rejoin by code.
+- **Cause:** the `serverUrl` the client sent isn't reachable from the sidecar, the credentials are wrong, or the URL isn't in `LT_ALLOWED_SERVERS`.
+- **Fix:** list the **public** URL clients actually use, not an internal address. The allowlist match is exact after normalization (trailing slash, query, and fragment are stripped).
+
+### `too many authentication attempts; slow down`
+
+- **Cause:** the connection hit the auth backoff after repeated failures (exponential; the socket is dropped after 10).
+- **Fix:** correct the credentials / `serverUrl`, then reconnect to reset.
+
+### `server is at capacity` / `room ... is full`
+
+- **Cause:** `LT_MAX_ROOMS` or `LT_MAX_MEMBERS_PER_ROOM` was reached.
+- **Fix:** raise the limit (or set it to `0` for unlimited) and restart.
+
+### `/stats` returns `404` or `401`
+
+- **`404`:** the endpoint is only registered when `LT_STATS_TOKEN` is set.
+- **`401`:** wrong or missing token — pass it as `?token=` or `Authorization: Bearer`.
+
+### Members in the same room never see each other
+
+- **Cause:** rooms are in-process with no backplane, so all members must hit the **same** instance.
+- **Fix:** run a single instance, or pin by room code behind multiple replicas (see [Scaling](#scaling)).
+
+### A room vanished
+
+- **Expected:** rooms are ephemeral — deleted when the last member leaves, and all cleared on restart. Members just rejoin by code.
