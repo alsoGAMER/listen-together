@@ -20,6 +20,10 @@ ws.onopen = () => {
 Keep the `memberId` from the `authenticated` reply. You are the **host** when
 `roomState.hostMemberId === memberId`.
 
+> Authenticate promptly: a connection that doesn't authenticate within ~20s is
+> closed by the server, so send `authenticate` as soon as the socket opens (and
+> again after every reconnect).
+
 ## 2. Create or join a room
 
 ```js
@@ -105,8 +109,12 @@ never while you're applying a remote update (or you'd ping-pong forever):
 function onLocalPlayerChange() {
   if (!isHost || applyingRemote) return;
   debounce(() => {
+    const queueChanged = !idsEqual(queueIds, lastSentQueue);
+    if (queueChanged) lastSentQueue = queueIds;
     send("transport", {
-      playing, positionMs, trackId, queue: queueIds, queueIndex,
+      playing, positionMs, trackId, queueIndex,
+      clientTimeMs: Date.now(),          // monotonic; lets the server drop out-of-order updates
+      ...(queueChanged ? { queue: queueIds } : {}),  // omit when unchanged — server keeps the current queue
     });
   }, 150);
 }
@@ -114,6 +122,15 @@ function onLocalPlayerChange() {
 
 Followers never emit `transport`. The `applyingRemote` guard + the host-only rule
 are what keep the loop from feeding back on itself.
+
+Two optional fields worth sending:
+- **`queue`** — omit it (or send `null`) when the queue hasn't changed since your
+  last `transport`; the server keeps the room's current queue. This avoids
+  resending the full track-id list on every play/pause/seek. Send it (a full list,
+  or `[]` to clear) only on an actual queue change.
+- **`clientTimeMs`** — a monotonic clock stamped at send time; the server drops
+  transports whose value is lower than the last applied one, guarding against
+  out-of-order delivery. Omit it (or send `0`) to disable the check.
 
 ## 6. Control handoff
 
