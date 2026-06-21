@@ -40,22 +40,21 @@ Subsonic server. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   threshold (~250 ms target).
 - **Ephemeral** in-memory rooms — no database.
 
-## Public test instance
+## Public instance
 
-A best-effort public instance runs at **`party.alsogamer.com`** if you want to try
-Listen Together without self-hosting:
+An official, best-effort instance runs at **`party.alsogamer.com`**:
 
 - **Sync server URL:** `https://party.alsogamer.com` (clients derive
   `wss://party.alsogamer.com/ws`). In Feishin: *Settings → Playback → Listen
   Together*.
-- Everyone in a room must use accounts on the **same** Subsonic/Navidrome server —
-  only track ids and positions are synced, never stream URLs or audio.
+- **Locked to one music server:** it only accepts accounts on the maintainer's own
+  Navidrome server, so it's ready to use if you already have an account there. To
+  run Listen Together against any other Subsonic/Navidrome server, self-host (below).
+- Everyone in a room is on that same server — only track ids and positions are
+  synced, never stream URLs or audio.
 
-It's for testing only: **no uptime or persistence guarantees**, rooms are
-ephemeral, and it may be wiped or taken down at any time. Note that authenticating
-sends your Subsonic credentials to the instance to validate them against your
-server, so only use a public instance you trust — for anything real, self-host
-(below).
+It's a live instance rather than a throwaway, but still best-effort: rooms are
+ephemeral and there are no hard uptime guarantees.
 
 ## Quick start
 
