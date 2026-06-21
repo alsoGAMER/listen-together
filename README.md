@@ -73,6 +73,7 @@ docker compose -f docker-compose.example.yml up --build
 | `LT_MAX_ROOMS` | `0` | Cap on concurrent rooms. `0` = unlimited. |
 | `LT_MAX_MEMBERS_PER_ROOM` | `0` | Cap on members per room. `0` = unlimited. |
 | `LT_STATS_TOKEN` | (none) | If set, enables `GET /stats` protected by this bearer token. Empty = endpoint disabled. |
+| `LT_AUTH_TIMEOUT` | `0` | Seconds a connection has to authenticate before it's dropped. `0` = built-in default (20s). |
 
 Endpoints: `GET /ws` (WebSocket), `GET /healthz`, and `GET /stats` (when `LT_STATS_TOKEN` is set).
 

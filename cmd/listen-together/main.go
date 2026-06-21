@@ -15,6 +15,8 @@
 //	LT_STATS_TOKEN           if set, enables GET /stats, protected by this bearer
 //	                         token (?token= or "Authorization: Bearer"). If empty
 //	                         the endpoint is not registered.
+//	LT_AUTH_TIMEOUT          seconds a connection has to authenticate before it's
+//	                         dropped (default 0 = built-in 20s).
 //
 // Endpoints: GET /ws (WebSocket), GET /healthz, and GET /stats when enabled.
 package main
@@ -43,6 +45,7 @@ func main() {
 		MaxRooms:          getenvInt("LT_MAX_ROOMS", 0),
 		MaxMembersPerRoom: getenvInt("LT_MAX_MEMBERS_PER_ROOM", 0),
 		AllowedOrigins:    splitAndTrim(os.Getenv("LT_ALLOWED_ORIGINS")),
+		AuthTimeout:       time.Duration(getenvInt("LT_AUTH_TIMEOUT", 0)) * time.Second,
 	}
 
 	h := hub.New(auth.New(allowed), opts)
@@ -74,6 +77,9 @@ func main() {
 	}
 	if len(opts.AllowedOrigins) > 0 {
 		log.Printf("allowed origins: %s", strings.Join(opts.AllowedOrigins, ", "))
+	}
+	if opts.AuthTimeout > 0 {
+		log.Printf("auth timeout: %s", opts.AuthTimeout)
 	}
 
 	go func() {
